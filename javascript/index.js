@@ -1227,13 +1227,30 @@ diff_match_patch.prototype.diff_cleanupMerge = function(diffs) {
  * @param {!Array.<!diff_match_patch.Diff>} diffs Array of diff tuples.
  */
 diff_match_patch.prototype.diff_cleanupSplitSurrogates = function(diffs) {
+  var hasTrailingHighSurrogate = diffs.some(function(diff) {
+    return diff[1].length !== 0 &&
+        diff_match_patch.prototype.isHighSurrogate(diff[1][diff[1].length - 1]);
+  });
+  if (!hasTrailingHighSurrogate) {
+    for (var x = 0; x < diffs.length; x++) {
+      if (diffs[x][1].length === 0) {
+        diffs.splice(x--, 1);
+      }
+    }
+    return diffs;
+  }
+
+  var originalDiffs = diffs.slice();
+  var originalTexts = diffs.map(function(diff) { return diff[1]; });
+  var text1 = this.diff_text1(diffs);
+  var text2 = this.diff_text2(diffs);
   var lastEnd;
   for (var x = 0; x < diffs.length; x++) {
     var thisDiff = diffs[x];
-    var thisTop  = thisDiff[1][0];
-    var thisEnd  = thisDiff[1][thisDiff[1].length - 1];
+    var thisTop = thisDiff[1][0];
+    var thisEnd = thisDiff[1][thisDiff[1].length - 1];
 
-    if (0 === thisDiff[1].length) {
+    if (thisDiff[1].length === 0) {
       diffs.splice(x--, 1);
       continue;
     }
@@ -1247,9 +1264,18 @@ diff_match_patch.prototype.diff_cleanupSplitSurrogates = function(diffs) {
       thisDiff[1] = lastEnd + thisDiff[1];
     }
 
-    if (0 === thisDiff[1].length) {
+    if (thisDiff[1].length === 0) {
       diffs.splice(x--, 1);
-      continue;
+    }
+  }
+
+  if (this.diff_text1(diffs) !== text1 || this.diff_text2(diffs) !== text2) {
+    diffs.splice(0, diffs.length, ...originalDiffs);
+    for (var x = 0; x < diffs.length; x++) {
+      diffs[x][1] = originalTexts[x];
+      if (diffs[x][1].length === 0) {
+        diffs.splice(x--, 1);
+      }
     }
   }
 
@@ -1264,6 +1290,34 @@ diff_match_patch.prototype.isHighSurrogate = function(c) {
 diff_match_patch.prototype.isLowSurrogate = function(c) {
   var v = c.charCodeAt(0);
   return v >= 0xDC00 && v <= 0xDFFF;
+};
+
+diff_match_patch.prototype.encodeURI = function(text) {
+  try {
+    return encodeURI(text);
+  } catch (e) {
+    // encodeURI rejects lone surrogates; this.decodeURI accepts their CESU-8 bytes.
+    var encoded = '';
+    var start = 0;
+    for (var x = 0; x < text.length; x++) {
+      var c = text[x];
+      if (this.isHighSurrogate(c) && x + 1 < text.length &&
+          this.isLowSurrogate(text[x + 1])) {
+        x++;
+        continue;
+      }
+      if (!this.isHighSurrogate(c) && !this.isLowSurrogate(c)) {
+        continue;
+      }
+      var code = c.charCodeAt(0);
+      encoded += encodeURI(text.slice(start, x));
+      encoded += '%' + (0xE0 | code >> 12).toString(16).toUpperCase();
+      encoded += '%' + (0x80 | code >> 6 & 0x3F).toString(16).toUpperCase();
+      encoded += '%' + (0x80 | code & 0x3F).toString(16).toUpperCase();
+      start = x + 1;
+    }
+    return encoded + encodeURI(text.slice(start));
+  }
 };
 
 diff_match_patch.prototype.digit16 = function(c) {
@@ -1530,7 +1584,7 @@ diff_match_patch.prototype.diff_toDelta = function(diffs) {
   for (var x = 0; x < diffs.length; x++) {
     switch (diffs[x][0]) {
       case DIFF_INSERT:
-        text[x] = '+' + encodeURI(diffs[x][1]);
+        text[x] = '+' + this.encodeURI(diffs[x][1]);
         break;
       case DIFF_DELETE:
         text[x] = '-' + diffs[x][1].length;
@@ -2319,7 +2373,7 @@ diff_match_patch.prototype.patch_fromText = function(textline) {
     while (textPointer < text.length) {
       var sign = text[textPointer].charAt(0);
       try {
-        var line = decodeURI(text[textPointer].substring(1));
+        var line = this.decodeURI(text[textPointer].substring(1));
       } catch (ex) {
         // Malformed URI sequence.
         throw new Error('Illegal escape in patch_fromText: ' + line);
@@ -2405,7 +2459,7 @@ diff_match_patch.patch_obj.prototype.toString = function() {
         op = ' ';
         break;
     }
-    text[x + 1] = op + encodeURI(this.diffs[x][1]) + '\n';
+    text[x + 1] = op + diff_match_patch.prototype.encodeURI(this.diffs[x][1]) + '\n';
   }
   return text.join('').replace(/%20/g, ' ');
 };
