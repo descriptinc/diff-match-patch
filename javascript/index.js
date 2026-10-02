@@ -1227,13 +1227,17 @@ diff_match_patch.prototype.diff_cleanupMerge = function(diffs) {
  * @param {!Array.<!diff_match_patch.Diff>} diffs Array of diff tuples.
  */
 diff_match_patch.prototype.diff_cleanupSplitSurrogates = function(diffs) {
-  var hasTrailingHighSurrogate = diffs.some(function(diff) {
-    return diff[1].length !== 0 &&
-        diff_match_patch.prototype.isHighSurrogate(diff[1][diff[1].length - 1]);
-  });
+  var hasTrailingHighSurrogate = false;
+  for (var x = 0; x < diffs.length; x++) {
+    var end = diffs[x][1][diffs[x][1].length - 1];
+    if (end && this.isHighSurrogate(end)) {
+      hasTrailingHighSurrogate = true;
+      break;
+    }
+  }
   if (!hasTrailingHighSurrogate) {
     for (var x = 0; x < diffs.length; x++) {
-      if (diffs[x][1].length === 0) {
+      if (0 === diffs[x][1].length) {
         diffs.splice(x--, 1);
       }
     }
@@ -1241,16 +1245,19 @@ diff_match_patch.prototype.diff_cleanupSplitSurrogates = function(diffs) {
   }
 
   var originalDiffs = diffs.slice();
-  var originalTexts = diffs.map(function(diff) { return diff[1]; });
+  var originalTexts = [];
+  for (var x = 0; x < diffs.length; x++) {
+    originalTexts[x] = diffs[x][1];
+  }
   var text1 = this.diff_text1(diffs);
   var text2 = this.diff_text2(diffs);
   var lastEnd;
   for (var x = 0; x < diffs.length; x++) {
     var thisDiff = diffs[x];
-    var thisTop = thisDiff[1][0];
-    var thisEnd = thisDiff[1][thisDiff[1].length - 1];
+    var thisTop  = thisDiff[1][0];
+    var thisEnd  = thisDiff[1][thisDiff[1].length - 1];
 
-    if (thisDiff[1].length === 0) {
+    if (0 === thisDiff[1].length) {
       diffs.splice(x--, 1);
       continue;
     }
@@ -1264,17 +1271,18 @@ diff_match_patch.prototype.diff_cleanupSplitSurrogates = function(diffs) {
       thisDiff[1] = lastEnd + thisDiff[1];
     }
 
-    if (thisDiff[1].length === 0) {
+    if (0 === thisDiff[1].length) {
       diffs.splice(x--, 1);
+      continue;
     }
   }
 
   if (this.diff_text1(diffs) !== text1 || this.diff_text2(diffs) !== text2) {
-    diffs.splice(0, diffs.length, ...originalDiffs);
-    for (var x = 0; x < diffs.length; x++) {
-      diffs[x][1] = originalTexts[x];
-      if (diffs[x][1].length === 0) {
-        diffs.splice(x--, 1);
+    diffs.length = 0;
+    for (var x = 0; x < originalDiffs.length; x++) {
+      originalDiffs[x][1] = originalTexts[x];
+      if (0 !== originalTexts[x].length) {
+        diffs.push(originalDiffs[x]);
       }
     }
   }
