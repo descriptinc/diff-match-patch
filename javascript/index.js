@@ -1227,6 +1227,7 @@ diff_match_patch.prototype.diff_cleanupMerge = function(diffs) {
  * @param {!Array.<!diff_match_patch.Diff>} diffs Array of diff tuples.
  */
 diff_match_patch.prototype.diff_cleanupSplitSurrogates = function(diffs) {
+  // Fast path: avoid copying diffs and rebuilding texts without a trailing high surrogate.
   var hasTrailingHighSurrogate = false;
   for (var x = 0; x < diffs.length; x++) {
     var end = diffs[x][1][diffs[x][1].length - 1];
@@ -1236,6 +1237,7 @@ diff_match_patch.prototype.diff_cleanupSplitSurrogates = function(diffs) {
     }
   }
   if (!hasTrailingHighSurrogate) {
+    // Still remove empty diffs, as the main cleanup loop does.
     for (var x = 0; x < diffs.length; x++) {
       if (0 === diffs[x][1].length) {
         diffs.splice(x--, 1);
